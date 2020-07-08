@@ -626,8 +626,60 @@ class Theme {
         if (SmoothScroll) new SmoothScroll('[href^="#"]', { speed: 300, speedAsDuration: true, header: '#header-desktop' });
     }
 
-    initCookieconsent() {
-        if (this.config.cookieconsent) cookieconsent.initialise(this.config.cookieconsent);
+    initCookieConsent() {
+        if (! this.config.cookieconsent) return;
+
+        cookieconsent.initialise({
+            ...this.config.cookieconsent,
+            onInitialise: status => {
+                this.onCookieConsentChange(status);
+            },
+            onStatusChange: (status, chosenBefore) => {
+                this.onCookieConsentChange(status, chosenBefore);
+            },
+        });
+    }
+
+    onCookieConsentChange(status, chosenBefore) {
+        if (status === "deny") return;
+
+        document.querySelectorAll(".cookieconsent-optout").forEach($element => {
+            $element.remove();
+        });
+
+        document.querySelectorAll(".cookieconsent-optin").forEach($element => {
+            $element.classList.remove("cookieconsent-optin");
+        });
+
+        document.querySelectorAll("iframe[data-cookieconsent]").forEach($element => {
+            $element.src = $element.getAttribute("data-src");
+            $element.removeAttribute("data-src");
+            $element.removeAttribute("data-cookieconsent");
+        });
+
+        var $fragment = document.createDocumentFragment();
+        document.querySelectorAll("script[data-cookieconsent]").forEach($element => {
+            var $script = document.createElement('script');
+            $script.type = 'text/javascript';
+            $script.src =  $element.getAttribute("data-src");
+            $script.async = false;
+            this.util.forEach($element.attributes, $attrib => {
+                if (! ["type", "data-src", "data-cookieconsent", "src", "async"].includes($attrib.name)) {
+                    $script.setAttribute($attrib.name, $attrib.value);
+                }
+            });
+            $script.innerHTML = $element.innerHTML;
+            $fragment.appendChild($script);
+            $element.remove();
+        });
+
+        if ($fragment.childElementCount > 0) {
+            $fragment.lastElementChild.onload = () => {
+                this.initWhenCookieConsent();
+            };
+        }
+
+        document.body.appendChild($fragment);
     }
 
     onScroll() {
@@ -696,6 +748,14 @@ class Theme {
         }, false);
     }
 
+    initWhenCookieConsent() {
+        try {
+            this.initMapbox();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
     init() {
         try {
             this.initSVGIcon();
@@ -713,8 +773,8 @@ class Theme {
             this.initMermaid();
             this.initEcharts();
             this.initTypeit();
-            this.initMapbox();
-            this.initCookieconsent();
+            if (! this.config.cookieconsent) this.initWhenCookieConsent();
+            this.initCookieConsent();
         } catch (err) {
             console.error(err);
         }
